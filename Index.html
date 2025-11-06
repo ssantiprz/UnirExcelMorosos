@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unir múltiples Excel en una sola hoja</title>
+  <!-- SheetJS (XLSX) -->
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{
+      --bg:#0b1220; --card:#121a2b; --ink:#e6edf3; --muted:#9fb0c7; --accent:#7cb5ff; --ok:#59d98e; --warn:#ffd166;
+      --shadow:0 10px 30px rgba(0,0,0,.25);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:linear-gradient(180deg,#0b1220 0%, #0f1830 100%); color:var(--ink)}
+    header{position:sticky; top:0; background:rgba(11,18,32,.7); backdrop-filter:blur(8px); padding:16px; border-bottom:1px solid rgba(255,255,255,.06);}
+    h1{margin:0; font-size:clamp(18px,2.6vw,28px); letter-spacing:.2px}
+    main{max-width:1100px; margin:24px auto; padding:0 16px 60px}
+    .grid{display:grid; grid-template-columns:1.15fr .85fr; gap:16px}
+    @media (max-width:960px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:var(--shadow)}
+    .card h2{margin:0 0 8px; font-size:18px}
+    .card .inner{padding:16px}
+
+    .drop{border:1.5px dashed rgba(255,255,255,.2); border-radius:14px; padding:20px; text-align:center; transition:.2s}
+    .drop.dragover{border-color:var(--accent); background:rgba(124,181,255,.06)}
+    .drop input{display:none}
+    .btnrow{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+    button, .btn{background:#1b2742; color:var(--ink); border:1px solid rgba(255,255,255,.12); padding:10px 14px; border-radius:12px; cursor:pointer; transition:.15s}
+    button:hover, .btn:hover{transform:translateY(-1px); box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .btn.ok{background:#123225; border-color:rgba(89,217,142,.45)}
+    .btn.warn{background:#3a2b14; border-color:rgba(255,209,102,.45)}
+
+    .kv{display:grid; grid-template-columns:180px 1fr; gap:10px 16px; align-items:center}
+    .kv label{color:var(--muted)}
+    .kv input[type="text"], .kv select{width:100%; background:#0f172a; border:1px solid rgba(255,255,255,.1); color:var(--ink); border-radius:10px; padding:10px}
+    .kv input[type="checkbox"]{transform:scale(1.1)}
+
+    .filelist{max-height:160px; overflow:auto; background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:8px}
+    .file{display:flex; justify-content:space-between; gap:8px; padding:8px 10px; border-radius:8px}
+    .file:nth-child(odd){background:rgba(255,255,255,.02)}
+    .muted{color:var(--muted)}
+
+    table{width:100%; border-collapse:collapse; font-size:13px}
+    th, td{border-bottom:1px solid rgba(255,255,255,.08); padding:8px 10px; text-align:left}
+    th{position:sticky; top:0; background:#0f172a; z-index:1}
+
+    .footer{margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+    .pill{font-size:12px; padding:6px 10px; background:#0f172a; border:1px solid rgba(255,255,255,.12); border-radius:999px}
+    .help{font-size:13px; color:var(--muted)}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Unir múltiples Excel en una sola hoja — herramienta rápida</h1>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="card">
+        <div class="inner">
+          <h2>1) Cargar archivos</h2>
+          <div id="drop" class="drop">
+            <p><strong>Arrastrá y soltá</strong> tus archivos .xlsx / .xls / .csv aquí<br><span class="muted">o</span></p>
+            <label class="btn" for="fileInput">Elegir archivos…</label>
+            <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" multiple />
+            <p class="help">Se unirá la <em>primera hoja</em> de cada archivo (o la que indiques abajo). Recomendado: que todas tengan los mismos encabezados.</p>
+          </div>
+
+          <div style="height:14px"></div>
+
+          <h2>2) Opciones</h2>
+          <div class="kv">
+            <label for="sheetName">Nombre de hoja (opcional)</label>
+            <input id="sheetName" type="text" placeholder="Si se completa, se buscará esta hoja en cada archivo" />
+
+            <label for="headersChk">Primera fila son encabezados</label>
+            <div><input id="headersChk" type="checkbox" checked /> <span class="muted">(une por nombre de columna; si faltan, rellena vacío)</span></div>
+
+            <label for="dedupeChk">Quitar filas duplicadas</label>
+            <div><input id="dedupeChk" type="checkbox" /> <span class="muted">(comparación exacta de todas las columnas)</span></div>
+
+            <label for="startRow">Comenzar desde la fila</label>
+            <input id="startRow" type="number" min="1" value="6" />
+
+            <label for="previewLimit">Límite vista previa</label>
+            <select id="previewLimit">
+              <option>30</option>
+              <option selected>50</option>
+              <option>100</option>
+              <option>200</option>
+            </select>
+          </div>
+
+          <div style="height:14px"></div>
+          <div class="btnrow">
+            <button id="mergeBtn" class="btn ok">Unir y descargar</button>
+            <button id="clearBtn" class="btn warn" title="Olvidar selección actual">Limpiar</button>
+            <span id="status" class="pill">Listo</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <div class="inner">
+          <h2>Archivos seleccionados</h2>
+          <div id="fileList" class="filelist muted">(ninguno)</div>
+          <div class="footer help">Se muestra el recuento de filas detectadas por archivo al leerlos.</div>
+        </div>
+      </aside>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+      <div class="inner">
+        <h2>Vista previa (post-unión)</h2>
+        <div id="previewWrap" style="max-height:360px; overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px">
+          <table id="preview"><thead></thead><tbody></tbody></table>
+        </div>
+        <div class="footer">
+          <span class="pill">Se limita al primer bloque de filas según el selector</span>
+          <a id="dlXlsx" class="btn" download>Descargar XLSX</a>
+          <a id="dlCsv" class="btn" download>Descargar CSV</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const fileInput = $('#fileInput');
+  const drop = $('#drop');
+  const fileList = $('#fileList');
+  const status = $('#status');
+  const mergeBtn = $('#mergeBtn');
+  const clearBtn = $('#clearBtn');
+  const sheetNameInput = $('#sheetName');
+  const startRowInput = $('#startRow');
+  const headersChk = $('#headersChk');
+  const dedupeChk = $('#dedupeChk');
+  const previewLimitSel = $('#previewLimit');
+  const tbl = $('#preview');
+  const dlXlsx = $('#dlXlsx');
+  const dlCsv = $('#dlCsv');
+
+  let files = [];
+  let mergedAOA = null; // Array of Arrays (including header row)
+
+  function setStatus(text){ status.textContent = text; }
+
+  function fmtSize(bytes){
+    if(bytes < 1024) return bytes + ' B';
+    const units=['KB','MB','GB']; let i=-1; do{ bytes/=1024; i++; }while(bytes>=1024 && i<units.length-1);
+    return bytes.toFixed(1)+' '+units[i];
+  }
+
+  function listFiles(meta=[]) {
+    if(!files.length){ fileList.innerHTML='(ninguno)'; return; }
+    fileList.innerHTML = files.map((f, i)=>{
+      const m = meta[i] || {}; // {rows}
+      return `<div class="file"><span>${f.name}</span><span class="muted">${fmtSize(f.size)}${m.rows?` • ${m.rows} filas`:''}</span></div>`;
+    }).join('');
+  }
+
+  function handleFiles(flist){
+    files = Array.from(flist || []);
+    listFiles();
+    setStatus(`${files.length} archivo(s) listo(s)`);
+  }
+
+  drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', ()=> drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e=>{ e.preventDefault(); drop.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+  fileInput.addEventListener('change', e=> handleFiles(e.target.files));
+
+  clearBtn.addEventListener('click', ()=>{
+    files=[]; fileInput.value=''; mergedAOA=null; listFiles(); setStatus('Listo'); renderPreview([]); setDownloadLinks(null);
+  });
+
+  mergeBtn.addEventListener('click', async ()=>{
+    if(!files.length){ alert('Cargá al menos un archivo.'); return; }
+    setStatus('Leyendo archivos…');
+    try{
+      const wantSheet = sheetNameInput.value.trim();
+      const useHeaders = headersChk.checked;
+      const meta=[];
+
+      // 1) Parse each file to an array of objects (if headers) or AOA
+      const dataObjects = []; // always push array of objects (keys = headers or generated)
+      let allHeaders = new Set();
+
+      for(const f of files){
+        const buf = await f.arrayBuffer();
+        const isCSV = /\.csv$/i.test(f.name);
+        let wb;
+        if(isCSV){
+          const text = new TextDecoder('utf-8').decode(new Uint8Array(buf));
+          wb = XLSX.read(text, {type:'string'});
+        } else {
+          wb = XLSX.read(buf, {type:'array'});
+        }
+        let wsname = wantSheet || wb.SheetNames[0];
+        let ws = wb.Sheets[wsname];
+        if(!ws){
+          console.warn('Hoja no encontrada en', f.name, '— se usa la primera.');
+          wsname = wb.SheetNames[0];
+          ws = wb.Sheets[wsname];
+        }
+        // Convert sheet to AOA and build objects starting at a given row
+        const START = Math.max(parseInt(startRowInput.value||'6',10), 1); // 1-indexed
+        const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+        let objects = [];
+        if(useHeaders){
+          // headers from first row of the sheet
+          const hdr = (aoa[0]||[]).map(h=> String(h||'').trim());
+          // data starts at START (1-indexed) -> slice index START-1
+          const dataRows = aoa.slice(START-1);
+          objects = dataRows.map(row=>{
+            const o={}; hdr.forEach((h, j)=>{ if(h){ o[h] = row[j] ?? ''; } }); return o;
+          });
+          hdr.forEach(h=> allHeaders.add(h||''));
+        } else {
+          // no headers: generate A,B,C... and slice from START
+          const width = Math.max(...aoa.map(r=> r.length), 0);
+          const cols = Array.from({length:width}, (_,i)=> XLSX.utils.encode_col(i));
+          const dataRows = aoa.slice(START-1);
+          objects = dataRows.map(row=>{
+            const o={}; cols.forEach((c, j)=> o[c] = row[j] ?? ''); return o;
+          });
+          cols.forEach(c=> allHeaders.add(c));
+        }
+
+        dataObjects.push(objects);
+        meta.push({rows: objects.length});
+      }
+
+      listFiles(meta);
+      setStatus('Uniendo…');
+
+      // 2) Normalize and concatenate
+      const headers = Array.from(allHeaders).filter(h=> h!=='');
+      // Preserve some ordering: by frequency of appearance across files
+      const freq = new Map(headers.map(h=> [h,0]));
+      for(const arr of dataObjects){
+        for(const o of arr){ for(const k of Object.keys(o)) if(freq.has(k)) freq.set(k, freq.get(k)+1); }
+      }
+      headers.sort((a,b)=> (freq.get(b)||0)-(freq.get(a)||0) || a.localeCompare(b));
+
+      const unified = [];
+      // Header row
+      unified.push(headers);
+      for(const arr of dataObjects){
+        for(const o of arr){
+          const row = headers.map(h=> (o[h]===undefined||o[h]===null)?'':o[h]);
+          // skip a possible header row duplicating names if useHeaders and values equal to headers
+          const looksHeader = headers.every((h,idx)=> String(row[idx]).trim()===String(headers[idx]).trim());
+          if(!(headersChk.checked && looksHeader)) unified.push(row);
+        }
+      }
+
+      // 3) Dedupe (optional)
+      if(dedupeChk.checked){
+        const seen = new Set();
+        const ded = [unified[0]]; // keep header
+        for(let i=1;i<unified.length;i++){
+          const key = JSON.stringify(unified[i]);
+          if(!seen.has(key)){ seen.add(key); ded.push(unified[i]); }
+        }
+        mergedAOA = ded;
+      } else {
+        mergedAOA = unified;
+      }
+
+      // 4) Render preview
+      renderPreview(mergedAOA);
+
+      // 5) Prepare downloads
+      setDownloadLinks(mergedAOA);
+
+      setStatus(`Listo: ${mergedAOA.length-1} fila(s) unidas, ${headers.length} columna(s)`);
+
+    } catch(err){
+      console.error(err);
+      setStatus('Error al procesar');
+      alert('Ocurrió un error al leer/combinar archivos. Revisá que sean .xlsx/.xls/.csv válidos.');
+    }
+  });
+
+  function renderPreview(aoa){
+    const limit = parseInt(previewLimitSel.value||'50',10);
+    const thead = tbl.querySelector('thead');
+    const tbody = tbl.querySelector('tbody');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    if(!aoa || !aoa.length){ return; }
+    const header = aoa[0] || [];
+    thead.innerHTML = '<tr>' + header.map(h=> `<th>${escapeHtml(String(h))}</th>`).join('') + '</tr>';
+    const rows = aoa.slice(1, 1+limit);
+    tbody.innerHTML = rows.map(r=> '<tr>' + r.map(v=> `<td>${escapeHtml(String(v))}</td>`).join('') + '</tr>').join('');
+  }
+
+  function setDownloadLinks(aoa){
+    if(!aoa || !aoa.length){ dlXlsx.removeAttribute('href'); dlCsv.removeAttribute('href'); dlXlsx.textContent='Descargar XLSX'; dlCsv.textContent='Descargar CSV'; return; }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Unido');
+
+    // XLSX file
+    const xlsxBlob = wbToBlob(wb);
+    const xlsxUrl = URL.createObjectURL(xlsxBlob);
+    dlXlsx.href = xlsxUrl; dlXlsx.download = `unido_${dateStamp()}.xlsx`; dlXlsx.textContent = 'Descargar XLSX';
+
+    // CSV file
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    const csvBlob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const csvUrl = URL.createObjectURL(csvBlob);
+    dlCsv.href = csvUrl; dlCsv.download = `unido_${dateStamp()}.csv`; dlCsv.textContent = 'Descargar CSV';
+  }
+
+  function wbToBlob(wb){
+    const wopts = {bookType:'xlsx', bookSST:false, type:'binary'};
+    const wbout = XLSX.write(wb, wopts);
+    const buf = new ArrayBuffer(wbout.length);
+    const view = new Uint8Array(buf);
+    for(let i=0; i<wbout.length; ++i) view[i] = wbout.charCodeAt(i) & 0xFF;
+    return new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  }
+
+  function dateStamp(){
+    const d = new Date();
+    const pad = n=> String(n).padStart(2,'0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+})();
+</script>
+</body>
+</html>
