@@ -123,6 +123,52 @@
         </div>
       </div>
     </section>
+      </div>
+
+    <div id="tab-csv" style="display:none">
+      <div class="grid">
+        <section class="card">
+          <div class="inner">
+            <h2>Convertir XLS/XLSX/CSV → CSV</h2>
+            <div id="csvDrop" class="drop">
+              <p><strong>Arrastrá y soltá</strong> tus archivos aquí<br><span class="muted">o</span></p>
+              <label class="btn" for="csvFileInput">Elegir archivos…</label>
+              <input id="csvFileInput" type="file" accept=".xlsx,.xls,.csv" multiple />
+            </div>
+
+            <div style="height:14px"></div>
+            <div class="kv">
+              <label for="csvSheetName">Nombre de hoja (opcional)</label>
+              <input id="csvSheetName" type="text" placeholder="Si se completa, exporta esta hoja de cada archivo" />
+
+              <label for="csvAllSheetsChk">Exportar todas las hojas</label>
+              <div><input id="csvAllSheetsChk" type="checkbox" /> <span class="muted">(genera un CSV por hoja)</span></div>
+            </div>
+
+            <div style="height:14px"></div>
+            <div class="btnrow">
+              <button id="convertBtn" class="btn ok">Convertir a CSV</button>
+              <span id="csvStatus" class="pill">Listo</span>
+            </div>
+          </div>
+        </section>
+
+        <aside class="card">
+          <div class="inner">
+            <h2>Archivos seleccionados</h2>
+            <div id="csvFileList" class="filelist muted">(ninguno)</div>
+            <div class="footer help">Vas a obtener enlaces de descarga debajo.</div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="card" style="margin-top:16px">
+        <div class="inner">
+          <h2>Resultados</h2>
+          <div id="csvResults" class="filelist"></div>
+        </div>
+      </section>
+    </div>
   </main>
 
 <script>
