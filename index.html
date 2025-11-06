@@ -49,13 +49,16 @@
     .footer{margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center}
     .pill{font-size:12px; padding:6px 10px; background:#0f172a; border:1px solid rgba(255,255,255,.12); border-radius:999px}
     .help{font-size:13px; color:var(--muted)}
-  </style>
+    .tabs{display:flex; gap:8px; margin:10px 0 16px}
+    .tabbtn{background:#132042; color:var(--ink); border:1px solid rgba(255,255,255,.12); padding:8px 12px; border-radius:10px; cursor:point
 </head>
 <body>
   <header>
     <h1>Unir múltiples Excel en una sola hoja — herramienta rápida</h1>
   </header>
   <main>
+    <div class="tabs"><button class="tabbtn active" data-tab="merge">Unir hojas</button><button class="tabbtn" data-tab="csv">XLS → CSV</button></div>
+    <div id="tab-merge">
     <div class="grid">
       <section class="card">
         <div class="inner">
