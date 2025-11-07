@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unir múltiples Excel en una sola hoja</title>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#0b1220;color:#e6edf3;margin:0;padding:20px}
+    h1{font-size:22px;margin-bottom:20px;text-align:center}
+    .card{background:#121a2b;border-radius:12px;padding:16px;box-shadow:0 4px 20px rgba(0,0,0,.3);max-width:900px;margin:auto}
+    .drop{border:1.5px dashed rgba(255,255,255,.2);border-radius:12px;padding:30px;text-align:center;margin-bottom:20px}
+    .drop input{display:none}
+    .btn{background:#1b2742;color:#e6edf3;border:1px solid rgba(255,255,255,.12);padding:10px 14px;border-radius:10px;cursor:pointer;text-decoration:none;margin-right:10px}
+    .muted{color:#9fb0c7}
+    .kv{display:grid;grid-template-columns:200px 1fr;gap:10px 16px;align-items:center;margin-top:10px}
+    .kv input,.kv select{width:100%;background:#0f172a;border:1px solid rgba(255,255,255,.1);color:#e6edf3;border-radius:10px;padding:8px}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:20px}
+    th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:6px 8px;text-align:left}
+    th{background:#0f172a;position:sticky;top:0}
+    .pill{font-size:12px;padding:6px 10px;background:#0f172a;border:1px solid rgba(255,255,255,.12);border-radius:999px;margin-left:10px}
+  </style>
+</head>
+<body>
+  <h1>Unir múltiples Excel en una sola hoja — herramienta rápida</h1>
+  <div class="card">
+    <div class="drop" id="drop">
+      <p><strong>Arrastrá y soltá</strong> tus archivos .xlsx/.xls/.csv aquí<br><span class="muted">o</span></p>
+      <label class="btn" for="fileInput">Elegir archivos…</label>
+      <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" multiple />
+      <p class="muted">Se unirá la primera hoja de cada archivo. Recomendado: que todas tengan los mismos encabezados.</p>
+    </div>
+
+    <div class="kv">
+      <label for="startRow">Comenzar desde la fila</label>
+      <input id="startRow" type="number" min="1" value="6" />
+
+      <label for="previewLimit">Límite vista previa</label>
+      <select id="previewLimit"><option>30</option><option selected>50</option><option>100</option><option>200</option></select>
+    </div>
+
+    <div style="margin-top:15px">
+      <a id="mergeBtn" class="btn">Unir y descargar</a>
+      <a id="clearBtn" class="btn">Limpiar</a>
+      <span id="status" class="pill">Listo</span>
+    </div>
+
+    <div id="fileList" class="muted" style="margin-top:10px">(ninguno)</div>
+
+    <table id="preview"><thead></thead><tbody></tbody></table>
+    <div style="margin-top:10px">
+      <a id="dlXlsx" class="btn" download>Descargar XLSX</a>
+      <a id="dlCsv" class="btn" download>Descargar CSV</a>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const $ = s=>document.querySelector(s);
+  const fileInput=$('#fileInput'),drop=$('#drop'),mergeBtn=$('#mergeBtn'),clearBtn=$('#clearBtn'),status=$('#status');
+  const fileList=$('#fileList'),tbl=$('#preview'),startRowInput=$('#startRow'),previewLimitSel=$('#previewLimit'),dlXlsx=$('#dlXlsx'),dlCsv=$('#dlCsv');
+  let files=[],mergedAOA=null;
+
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');handleFiles(e.dataTransfer.files);});
+  fileInput.addEventListener('change',e=>handleFiles(e.target.files));
+
+  function handleFiles(list){files=Array.from(list||[]);fileList.innerHTML=files.map(f=>f.name).join('<br>')||'(ninguno)';setStatus(files.length+' archivo(s) listo(s)');}
+  function setStatus(t){status.textContent=t;}
+
+  clearBtn.addEventListener('click',()=>{files=[];fileList.textContent='(ninguno)';tbl.querySelector('thead').innerHTML='';tbl.querySelector('tbody').innerHTML='';dlXlsx.removeAttribute('href');dlCsv.removeAttribute('href');setStatus('Listo');});
+
+  mergeBtn.addEventListener('click',async()=>{
+    if(!files.length){alert('Cargá al menos un archivo.');return;}
+    setStatus('Leyendo archivos...');
+    try{
+      const dataObjects=[],allHeaders=new Set();
+      const START=Math.max(parseInt(startRowInput.value||'6',10),1);
+      for(const f of files){
+        const buf=await f.arrayBuffer();
+        const wb=XLSX.read(buf,{type:'array'});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        const hdr=(aoa[0]||[]).map(h=>String(h||''));
+        const dataRows=aoa.slice(START-1);
+        const objects=dataRows.map(r=>{const o={};hdr.forEach((h,j)=>o[h]=r[j]??'');return o;});
+        hdr.forEach(h=>allHeaders.add(h));
+        dataObjects.push(objects);
+      }
+      const headers=Array.from(allHeaders);
+      const unified=[headers];
+      for(const arr of dataObjects){for(const o of arr){unified.push(headers.map(h=>o[h]??''));}}
+      mergedAOA=unified;
+      renderPreview(unified);
+      setDownloadLinks(unified);
+      setStatus('Listo: '+(unified.length-1)+' filas');
+    }catch(e){console.error(e);setStatus('Error');alert('Error al procesar los archivos');}
+  });
+
+  function renderPreview(aoa){
+    const limit=parseInt(previewLimitSel.value||'50',10);
+    const thead=tbl.querySelector('thead'),tbody=tbl.querySelector('tbody');
+    thead.innerHTML='';tbody.innerHTML='';
+    if(!aoa||!aoa.length)return;
+    const hdr=aoa[0];
+    thead.innerHTML='<tr>'+hdr.map(h=>'<th>'+escapeHtml(h)+'</th>').join('')+'</tr>';
+    tbody.innerHTML=aoa.slice(1,1+limit).map(r=>'<tr>'+r.map(c=>'<td>'+escapeHtml(c)+'</td>').join('')+'</tr>').join('');
+  }
+
+  function setDownloadLinks(aoa){
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Unido');
+    const wbout=XLSX.write(wb,{bookType:'xlsx',bookSST:false,type:'binary'});
+    const buf=new ArrayBuffer(wbout.length);const view=new Uint8Array(buf);
+    for(let i=0;i<wbout.length;i++)view[i]=wbout.charCodeAt(i)&0xFF;
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const xurl=URL.createObjectURL(blob);dlXlsx.href=xurl;dlXlsx.download='unido_'+Date.now()+'.xlsx';
+    const csv=XLSX.utils.sheet_to_csv(ws);const cblob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const curl=URL.createObjectURL(cblob);dlCsv.href=curl;dlCsv.download='unido_'+Date.now()+'.csv';
+  }
+  function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+})(); 
+</script>
+</body>
+</html>
